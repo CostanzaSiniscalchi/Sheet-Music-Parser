@@ -1,0 +1,3 @@
+[submodule "data/muscima"]
+	path = data/muscima
+	url = https://github.com/hajicj/muscima
