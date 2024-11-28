@@ -1,3 +1,6 @@
 [submodule "data/muscima"]
 	path = data/muscima
 	url = https://github.com/hajicj/muscima
+[submodule "models/MusicSymbolClassifier"]
+	path = models/MusicSymbolClassifier
+	url = https://github.com/apacha/MusicSymbolClassifier.git
