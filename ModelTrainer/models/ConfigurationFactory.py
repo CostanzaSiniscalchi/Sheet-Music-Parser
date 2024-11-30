@@ -17,7 +17,7 @@ class ConfigurationFactory:
                                                                      number_of_classes)
 
         for i in range(len(configurations)):
-            if configurations[i].name() == name:
+            if configurations[i].name == name:
                 return configurations[i]
 
         raise Exception("No configuration found by name {0}".format(name))

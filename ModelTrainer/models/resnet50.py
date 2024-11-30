@@ -6,10 +6,13 @@ import torch.nn.functional as F
 class ResNet1Configuration(nn.Module):
     """ResNet-1 Configuration in PyTorch"""
 
-    def __init__(self, width: int, height: int, number_of_classes: int, weight_decay: float = 1e-4):
+    def __init__(self, optimizer, width: int, height: int, training_minibatch_size,number_of_classes: int, weight_decay: float = 1e-4):
         super(ResNet1Configuration, self).__init__()
         self.weight_decay = weight_decay
         self.input_shape = (3, height, width)
+        self.name = 'resnet'
+        self.optimizer = optimizer
+        self.training_minibatch_size = training_minibatch_size
 
         # Initial Convolution and Pooling
         self.initial_layer = nn.Sequential(

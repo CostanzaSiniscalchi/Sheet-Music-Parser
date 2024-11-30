@@ -4,11 +4,14 @@ import torch.nn as nn
 
 class VggConfiguration(nn.Module):
     """VGG Configuration in PyTorch"""
-    def __init__(self, width: int, height: int, number_of_classes: int, weight_decay: float = 1e-4):
+    def __init__(self, optimizer, width: int, height: int, training_minibatch_size,number_of_classes: int, weight_decay: float = 1e-4):
         super(VggConfiguration, self).__init__()
         
         self.weight_decay = weight_decay
         self.input_shape = (3, height, width)
+        self.name = 'vgg'
+        self.optimizer = optimizer
+        self.training_minibatch_size = training_minibatch_size
 
         self.features = nn.Sequential(
             # Block 1

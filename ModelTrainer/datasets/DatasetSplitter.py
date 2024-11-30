@@ -95,12 +95,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--source_directory",
         type=str,
-        default="../data/images",
+        default="data/data/images",
         help="The directory, where the images should be copied from")
     parser.add_argument(
         "--destination_directory",
         type=str,
-        default="../data/images",
+        default="data/data/images",
         help="The directory, where the images should be split into the three directories 'train', 'test' and 'validation'")
 
     flags, unparsed = parser.parse_known_args()

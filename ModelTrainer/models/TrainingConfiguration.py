@@ -1,34 +1,31 @@
 from abc import ABC, abstractmethod
-
-from tensorflow.keras import Model
-from tensorflow.keras.optimizers import Optimizer, SGD, Adam, Adadelta
+from torch import nn, optim
 
 
 class TrainingConfiguration(ABC):
-    """ The base class for a configuration that specifies the hyperparameters of a training """
+    """Base class for a configuration that specifies the hyperparameters of training."""
 
     def __init__(self,
                  data_shape: tuple = (224, 128, 3),  # Rows = Height, columns = Width, channels = typically 3 (RGB)
                  number_of_classes: int = 32,
-                 number_of_epochs: int = 200,
+                 number_of_epochs: int = 2,
                  number_of_epochs_before_early_stopping: int = 20,
                  number_of_epochs_before_reducing_learning_rate: int = 8,
                  training_minibatch_size: int = 64,
-                 initialization: str = "glorot_uniform",
+                 initialization: str = "xavier_uniform",
                  learning_rate: float = 0.01,
                  learning_rate_reduction_factor: float = 0.5,
                  minimum_learning_rate: float = 0.00001,
                  weight_decay: float = 0.0001,
                  nesterov_momentum: float = 0.9,
-                 zoom_range=0.2,
-                 rotation_range=10,
-                 optimizer: str = "SGD",
-                 ):
+                 zoom_range: float = 0.2,
+                 rotation_range: int = 10,
+                 optimizer: str = "SGD"):
         """
-        :param data_shape: Tuple with order (rows, columns, channels)
-        :param zoom_range: Percentage that the input will dynamically be zoomed turing training (0-1)
-        :param rotation_range: Random rotation of the input image during training in degree
-        :param optimizer: The used optimizer for the training, currently supported are either 'SGD', 'Adam' or 'Adadelta'.
+        :param data_shape: Tuple with order (rows, columns, channels).
+        :param zoom_range: Percentage that the input will dynamically be zoomed during training (0-1).
+        :param rotation_range: Random rotation of the input image during training in degrees.
+        :param optimizer: The optimizer for training, currently supported are 'SGD', 'Adam', or 'Adadelta'.
         """
         self.optimizer = optimizer
         self.rotation_range = rotation_range
@@ -48,58 +45,55 @@ class TrainingConfiguration(ABC):
         self.nesterov_momentum = nesterov_momentum
 
     @abstractmethod
-    def classifier(self) -> Model:
-        """ Returns the classifier of this configuration """
+    def classifier(self) -> nn.Module:
+        """Returns the classifier of this configuration."""
         pass
 
     @abstractmethod
     def name(self) -> str:
-        """ Returns the name of this configuration """
+        """Returns the name of this configuration."""
         pass
 
     @abstractmethod
     def performs_localization(self) -> bool:
-        """ Returns wether this configuration has a regression head that performs object localization or not """
+        """Returns whether this configuration has a regression head that performs object localization."""
         pass
 
-    def get_optimizer(self) -> Optimizer:
+    def get_optimizer(self, model_parameters):
         """
-        Returns the configured optimizer for this configuration
-        :return:
+        Returns the configured optimizer for this configuration.
+
+        :param model_parameters: Parameters of the model to optimize.
+        :return: Configured optimizer.
         """
         if self.optimizer == "SGD":
-            return SGD(lr=self.learning_rate, momentum=self.nesterov_momentum, nesterov=True)
+            return optim.SGD(model_parameters, lr=self.learning_rate, momentum=self.nesterov_momentum, nesterov=True,
+                             weight_decay=self.weight_decay)
         if self.optimizer == "Adam":
-            return Adam()
+            return optim.Adam(model_parameters, lr=self.learning_rate, weight_decay=self.weight_decay)
         if self.optimizer == "Adadelta":
-            return Adadelta()
+            return optim.Adadelta(model_parameters, lr=self.learning_rate, weight_decay=self.weight_decay)
 
-        raise Exception("Invalid optimizer {0} requested".format(self.optimizer))
+        raise ValueError(f"Invalid optimizer '{self.optimizer}' requested.")
 
     def get_initial_learning_rate(self) -> float:
-        cfg = self.get_optimizer().get_config()
-        if "lr" in cfg:
-            return cfg["lr"]
-        else:
-            return cfg["learning_rate"]
+        """
+        Returns the initial learning rate.
+
+        :return: Initial learning rate.
+        """
+        return self.learning_rate
 
     def summary(self) -> str:
-        """ Returns the string that summarizes this configuration """
-
-        optimizer = self.get_optimizer()
-
-        summary = "Training for {0:d} epochs ...\n".format(self.number_of_epochs)
-        summary += "Additional parameters: Initialization: {0}, Weight-decay of {1}, Minibatch-size: {2}, " \
-                   "Early stopping after {3} epochs without improvement\n" \
-            .format(self.initialization, self.weight_decay, self.training_minibatch_size,
-                    self.number_of_epochs_before_early_stopping)
-        summary += "Data-Shape: {0}, Reducing learning rate by factor to {1} respectively if not improved validation " \
-                   "accuracy after {2} epochs\n" \
-            .format(self.data_shape, self.learning_rate_reduction_factor,
-                    self.number_of_epochs_before_reducing_learning_rate)
-        summary += "Data-augmentation: Zooming {0}% randomly, rotating {1}° randomly\n" \
-            .format(self.zoom_range * 100, self.rotation_range)
-        summary += "Optimizer: {0}, with parameters {1}\n".format(self.optimizer, optimizer.get_config())
-        summary += "Performing object localization: {0}".format(self.performs_localization())
-
+        """Returns the string that summarizes this configuration."""
+        summary = f"Training for {self.number_of_epochs} epochs ...\n"
+        summary += f"Additional parameters: Initialization: {self.initialization}, Weight-decay of {self.weight_decay}, " \
+                   f"Minibatch-size: {self.training_minibatch_size}, Early stopping after " \
+                   f"{self.number_of_epochs_before_early_stopping} epochs without improvement.\n"
+        summary += f"Data-Shape: {self.data_shape}, Reducing learning rate by factor {self.learning_rate_reduction_factor} " \
+                   f"if validation accuracy does not improve after " \
+                   f"{self.number_of_epochs_before_reducing_learning_rate} epochs.\n"
+        summary += f"Data-augmentation: Zooming {self.zoom_range * 100}%, rotating {self.rotation_range}° randomly.\n"
+        summary += f"Optimizer: {self.optimizer}, Learning Rate: {self.learning_rate}.\n"
+        summary += f"Performing object localization: {self.performs_localization()}."
         return summary

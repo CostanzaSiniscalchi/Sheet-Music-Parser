@@ -24,7 +24,7 @@ class ClassWeightCalculator:
         :return:
         """
 
-        if method is None:
+        if method == None:
             return None
 
         if method not in ['simple', 'skBalance']:
@@ -48,7 +48,7 @@ class ClassWeightCalculator:
             number_of_elements_per_class[class_name] = number_of_elements
             class_weights[class_name] = 1 / math.sqrt(number_of_elements)
 
-        if method is "simple":
+        if method == "simple":
             pass
         else:
             # y simulates the actual data by repeating an instance of the class-name per actual instance,
