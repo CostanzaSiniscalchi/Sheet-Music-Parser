@@ -190,6 +190,7 @@ def train_model(dataset_directory, model_name, width, height,
 
     # Training loop
     best_val_accuracy = 0.0
+    print('Starting model training ... ')
     for epoch in range(initial_epoch, training_configuration.number_of_epochs):
         model.train()
         running_loss, correct, total = 0.0, 0, 0
@@ -214,6 +215,7 @@ def train_model(dataset_directory, model_name, width, height,
         # Validation
         # This is to handle the case where some classes don't have enough data to create train/validation/test splits
         if val_loader:
+            print('Evaluating model ...')
             model.eval()
             val_loss, val_correct, val_total = 0.0, 0, 0
             with torch.no_grad():
@@ -230,7 +232,6 @@ def train_model(dataset_directory, model_name, width, height,
             writer.add_scalar("Loss/Validation", val_loss / len(val_loader), epoch)
             writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
             print(f"Validation Accuracy: {val_accuracy:.2f}%")
-
         else:
             print("No validation samples available. Skipping validation.")
 
@@ -251,6 +252,7 @@ def train_model(dataset_directory, model_name, width, height,
     print("Training completed. \nTesting...")
     # This is to handle the case where some classes don't have enough data to create train/validation/test splits
     if test_loader:
+        print('Testing model ...')
         model.eval()
         test_correct, test_total = 0, 0
         predictions, true_labels = [], []
