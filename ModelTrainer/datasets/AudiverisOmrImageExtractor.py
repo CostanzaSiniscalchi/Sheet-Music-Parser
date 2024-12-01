@@ -37,17 +37,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--raw_dataset_directory",
         type=str,
-        default="../data/audiveris_omr_raw",
+        default="data/data/audiveris_omr_raw",
         help="The directory, where the raw Muscima++ dataset can be found")
     parser.add_argument(
         "--intermediate_image_directory",
         type=str,
-        default="../data/audiveris_omr",
+        default="data/data/audiveris_omr",
         help="The directory, where the raw bitmaps will be generated")
     parser.add_argument(
         "--image_dataset_directory",
         type=str,
-        default="../data/images",
+        default="data/data/images",
         help="The directory, where the processed bitmaps will be copied to after filtering and renaming classes")
 
     flags, unparsed = parser.parse_known_args()

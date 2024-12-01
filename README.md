@@ -39,25 +39,60 @@ Ensure you have Conda installed on your machine. If not, download it from [Conda
 
 ## Dataset Preparation
 
-1. Extract Dataset
-Run the `data_extraction.ipynb` script to extract the dataset into the proper directory:
+### 1. Extract Dataset
+
+There are multiple dataset the can be downlaoaded to train the model on 
+
+- Audiveris Dataset
+
+   This dataset contains 800 of Typeset music sheet images with XML annotations. This data can be used for both Symbol Classification and Object Detection tasks.
+
+   Run the `AudiverisOmrImageExtractor.py` script to extract the dataset into the proper directory: 
    ```bash
-   python3 data/data_extraction.ipynb
+   python3 ModelTrainer/datasets/AudiverisOmrImageExtractor.py
    ```
 
-2. Split Dataset
+- Fornes Dataset
+
+   This dataset contains 4100 of Handwritten music sheet images. This data can be used for Symbol Classification task.
+
+   Run the `FornesMusicSymbolsImagePreparer.py` script to extract the dataset into the proper directory: 
+   ```bash
+   python3 ModelTrainer/datasets/FornesMusicSymbolsImagePreparer.py
+   ```
+
+- MUSCIMA++ Dataset
+
+   This dataset contains > 90000 annotatations of Handwritten music sheet images, Measure Annotations, MuNG. This data can be used for the following tasks: Symbol Classification, Object Detection, End-To-End Recognition, Measure Recognition.
+
+   Run the `MuscimaPlusPlusImageGenerator2.py` script to extract the dataset into the proper directory: 
+   ```bash
+   python3 ModelTrainer/datasets/MuscimaPlusPlusImageGenerator2.py
+   ```
+
+- OpenOMR Dataset
+
+   This dataset contains 1000 score images of Typeset music sheets. This data can be used for Symbol Classification task.
+
+   Run the `OpenOmrImagePreparer.py` script to extract the dataset into the proper directory: 
+   ```bash
+   python3 ModelTrainer/datasets/OpenOmrImagePreparer.py
+   ```
+
+### 2. Split Dataset
 Split the extracted dataset into Training, Validation, and Test sets using the provided script:
 
    ```bash
-   python3 data/data_extraction.ipynb
+   python3 ModelTrainer/datasets/DatasetSplitter.py
    ```
 
-    This will organize the dataset into:
+   This will organize the dataset into:
+
    ```bash
-    data/
-        training/
-        validation/
-        test/
+    data/images/
+                training/
+                validation/
+                test/
    ```
 
 ## Running the Model

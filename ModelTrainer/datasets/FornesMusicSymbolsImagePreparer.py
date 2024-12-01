@@ -45,12 +45,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--raw_dataset_directory",
         type=str,
-        default="../data/fornes_raw",
+        default="data/data/fornes_raw",
         help="The directory, where the raw Muscima++ dataset can be found")
     parser.add_argument(
         "--image_dataset_directory",
         type=str,
-        default="../data/images",
+        default="data/data/images",
         help="The directory, where the images will be copied to")
 
     flags, unparsed = parser.parse_known_args()
