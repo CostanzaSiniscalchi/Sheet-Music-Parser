@@ -50,13 +50,24 @@ class DatasetSplitter:
         :param seed: An arbitrary seed that can be used to obtain repeatable pseudo-random indices
         :return: A triple of three list, containing indices of the training, validation and test sets
         """
+        print(f'\n Number of images in class {dataset_size}')
         random.seed(seed)
-        all_indices = range(0, dataset_size)
+        all_indices = list(range(dataset_size))
         validation_sample_size = int(dataset_size * validation_percentage)
         test_sample_size = int(dataset_size * test_percentage)
-        validation_sample_indices = random.sample(all_indices, validation_sample_size)
-        test_sample_indices = random.sample((set(all_indices) - set(validation_sample_indices)), test_sample_size)
-        training_sample_indices = list(set(all_indices) - set(validation_sample_indices) - set(test_sample_indices))
+        
+
+        # Shuffle indices to get random splits
+        random.shuffle(all_indices)
+
+        validation_sample_indices = all_indices[:validation_sample_size]
+        test_sample_indices = all_indices[validation_sample_size:validation_sample_size + test_sample_size]
+        training_sample_indices = all_indices[validation_sample_size + test_sample_size:]
+        
+        print(f'Training size = {len(training_sample_indices)}')
+        print(f'Validation size = {len(validation_sample_indices)}')
+        print(f'Test size = {len(test_sample_indices)}')
+
         return training_sample_indices, validation_sample_indices, test_sample_indices
 
     def delete_split_directories(self):

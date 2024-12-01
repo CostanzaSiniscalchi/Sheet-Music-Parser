@@ -15,6 +15,68 @@ from sklearn.metrics import classification_report
 from models.ConfigurationFactory import ConfigurationFactory
 from datasets.DirectoryIteratorWithBoundingBoxes import DirectoryIteratorWithBoundingBoxes
 from ClassWeightCalculator import ClassWeightCalculator
+from torchvision.datasets import DatasetFolder
+from torchvision.datasets.folder import IMG_EXTENSIONS, default_loader
+
+# Custom ImageFolder to handle classes with empty folders for validation/test sets
+
+class FilteredImageFolder(DatasetFolder):
+    def __init__(self, root, transform=None, extensions=None):
+        self.root = root
+        self.extensions = extensions or IMG_EXTENSIONS
+        self.loader = default_loader
+
+        # Find classes and their indices
+        classes, class_to_idx = self.find_classes(root)
+
+        # Filter classes with no valid files
+        samples = self.make_dataset(root, class_to_idx, self.extensions, self.is_valid_file)
+        valid_classes = {class_name for class_name, idx in class_to_idx.items() if any(s[1] == idx for s in samples)}
+
+        if len(valid_classes) == 0:
+            print(f"Warning: No valid files found in {root}. Skipping this dataset.")
+            self.classes = []
+            self.class_to_idx = {}
+            self.samples = []
+            super().__init__(root, loader=self.loader, extensions=self.extensions, transform=transform)
+            return
+
+        # Update class_to_idx with valid classes only
+        self.classes = sorted(valid_classes)
+        self.class_to_idx = {class_name: i for i, class_name in enumerate(self.classes)}
+
+        # Filter samples to include only valid classes
+        self.samples = [(s[0], self.class_to_idx[classes[s[1]]]) for s in samples if classes[s[1]] in valid_classes]
+
+        # Initialize DatasetFolder with filtered samples
+        super().__init__(root, loader=self.loader, extensions=self.extensions, transform=transform)
+
+    def make_dataset(self, directory, class_to_idx, extensions, is_valid_file=None):
+        """
+        Creates a dataset, excluding classes with no valid files.
+        """
+        instances = []
+        for target_class in sorted(class_to_idx.keys()):
+            class_index = class_to_idx[target_class]
+            target_dir = os.path.join(directory, target_class)
+            if not os.path.isdir(target_dir):
+                continue
+            for root, _, fnames in sorted(os.walk(target_dir, followlinks=True)):
+                for fname in sorted(fnames):
+                    path = os.path.join(root, fname)
+                    if is_valid_file is not None:
+                        if is_valid_file(path):
+                            instances.append((path, class_index))
+                    elif path.lower().endswith(tuple(extensions)):
+                        instances.append((path, class_index))
+        return instances
+
+    def is_valid_file(self, path):
+        """
+        Checks if a file has a valid extension.
+        """
+        return path.lower().endswith(tuple(self.extensions))
+    
 
 def train_model(dataset_directory, model_name, width, height,
                 training_minibatch_size, optimizer_name, dynamic_learning_rate_reduction,
@@ -75,13 +137,16 @@ def train_model(dataset_directory, model_name, width, height,
             transform=val_test_transform
         )
     else:
+        # Load datasets
         train_dataset = ImageFolder(os.path.join(image_dataset_directory, "training"), transform=train_transform)
-        val_dataset = ImageFolder(os.path.join(image_dataset_directory, "validation"), transform=val_test_transform)
-        test_dataset = ImageFolder(os.path.join(image_dataset_directory, "test"), transform=val_test_transform)
+        val_dataset = FilteredImageFolder(os.path.join(image_dataset_directory, "validation"), transform=val_test_transform)
+        test_dataset = FilteredImageFolder(os.path.join(image_dataset_directory, "test"), transform=val_test_transform)
+
 
     train_loader = DataLoader(train_dataset, batch_size=training_minibatch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=training_minibatch_size, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=training_minibatch_size, shuffle=False)
+    # Validation and test loaders may be empty
+    val_loader = DataLoader(val_dataset, batch_size=training_minibatch_size, shuffle=False) if val_dataset else None
+    test_loader = DataLoader(test_dataset, batch_size=training_minibatch_size, shuffle=False) if test_dataset else None
 
     print(f"Number of classes: {len(train_dataset.classes)}")
 
@@ -147,22 +212,27 @@ def train_model(dataset_directory, model_name, width, height,
         print(f"Epoch {epoch + 1}, Train Loss: {running_loss:.4f}, Accuracy: {train_accuracy:.2f}%")
 
         # Validation
-        model.eval()
-        val_loss, val_correct, val_total = 0.0, 0, 0
-        with torch.no_grad():
-            for inputs, labels in val_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
-                val_loss += loss.item()
-                _, preds = outputs.max(1)
-                val_total += labels.size(0)
-                val_correct += preds.eq(labels).sum().item()
+        # This is to handle the case where some classes don't have enough data to create train/validation/test splits
+        if val_loader:
+            model.eval()
+            val_loss, val_correct, val_total = 0.0, 0, 0
+            with torch.no_grad():
+                for inputs, labels in val_loader:
+                    inputs, labels = inputs.to(device), labels.to(device)
+                    outputs = model(inputs)
+                    loss = criterion(outputs, labels)
+                    val_loss += loss.item()
+                    _, preds = outputs.max(1)
+                    val_total += labels.size(0)
+                    val_correct += preds.eq(labels).sum().item()
 
-        val_accuracy = 100.0 * val_correct / val_total
-        writer.add_scalar("Loss/Validation", val_loss / len(val_loader), epoch)
-        writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
-        print(f"Validation Accuracy: {val_accuracy:.2f}%")
+            val_accuracy = 100.0 * val_correct / val_total
+            writer.add_scalar("Loss/Validation", val_loss / len(val_loader), epoch)
+            writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
+            print(f"Validation Accuracy: {val_accuracy:.2f}%")
+
+        else:
+            print("No validation samples available. Skipping validation.")
 
         if scheduler:
             scheduler.step(val_accuracy)
@@ -178,24 +248,28 @@ def train_model(dataset_directory, model_name, width, height,
             }, f"{model_name}_epoch_{epoch + 1}.pth")
             print(f"Best model saved with accuracy: {val_accuracy:.2f}%")
 
-    print("Training completed. Testing...")
-    model.eval()
-    test_correct, test_total = 0, 0
-    predictions, true_labels = [], []
-    with torch.no_grad():
-        for inputs, labels in test_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            _, preds = outputs.max(1)
-            predictions.extend(preds.cpu().numpy())
-            true_labels.extend(labels.cpu().numpy())
-            test_total += labels.size(0)
-            test_correct += preds.eq(labels).sum().item()
+    print("Training completed. \nTesting...")
+    # This is to handle the case where some classes don't have enough data to create train/validation/test splits
+    if test_loader:
+        model.eval()
+        test_correct, test_total = 0, 0
+        predictions, true_labels = [], []
+        with torch.no_grad():
+            for inputs, labels in test_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                _, preds = outputs.max(1)
+                predictions.extend(preds.cpu().numpy())
+                true_labels.extend(labels.cpu().numpy())
+                test_total += labels.size(0)
+                test_correct += preds.eq(labels).sum().item()
 
-    test_accuracy = 100.0 * test_correct / test_total
-    print(f"Test Accuracy: {test_accuracy:.2f}%")
-    print("Classification Report:")
-    print(classification_report(true_labels, predictions, target_names=train_dataset.classes))
+        test_accuracy = 100.0 * test_correct / test_total
+        print(f"Test Accuracy: {test_accuracy:.2f}%")
+        print("Classification Report:")
+        print(classification_report(true_labels, predictions, target_names=train_dataset.classes))
+    else:
+        print("No test samples available. Skipping testing.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a PyTorch model for symbol classification.")
