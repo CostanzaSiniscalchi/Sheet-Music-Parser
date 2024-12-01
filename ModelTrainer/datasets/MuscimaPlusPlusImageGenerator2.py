@@ -5,6 +5,8 @@ from typing import List, Dict
 
 from mung.node import Node
 from omrdatasettools.MuscimaPlusPlusSymbolImageGenerator import MuscimaPlusPlusSymbolImageGenerator
+from omrdatasettools.Downloader import Downloader
+from omrdatasettools.OmrDataset import OmrDataset
 
 
 class MuscimaPlusPlusImageGenerator2(MuscimaPlusPlusSymbolImageGenerator):
@@ -167,15 +169,24 @@ if __name__ == "__main__":
     parser.add_argument(
         "--raw_dataset_directory",
         type=str,
-        default="../data/muscima_pp_raw",
+        default="data/data/muscima_pp_raw",
         help="The directory, where the raw Muscima++ dataset can be found")
     parser.add_argument(
         "--image_dataset_directory",
         type=str,
-        default="../data/images",
+        default="data/data/images",
         help="The directory, where the generated bitmaps will be created")
 
     flags, unparsed = parser.parse_known_args()
 
+    # Download the dataset
+    dataset_downloader = Downloader()
+    dataset_downloader.download_and_extract_dataset(OmrDataset.MuscimaPlusPlus_V2, flags.raw_dataset_directory)
+
+    # Convert the raw data into images
+    muscima_pp_image_generator = MuscimaPlusPlusSymbolImageGenerator()
+    muscima_pp_image_generator.extract_and_render_all_symbol_masks(flags.raw_dataset_directory,
+                                                                   flags.image_dataset_directory)
+    # Extract Symbols for training
     muscima_pp_image_generator = MuscimaPlusPlusImageGenerator2()
     muscima_pp_image_generator.extract_symbols_for_training(flags.raw_dataset_directory, flags.image_dataset_directory)
