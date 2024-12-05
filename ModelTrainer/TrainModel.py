@@ -177,7 +177,8 @@ def train_model(dataset_directory, model_name, width, height,
     else:
         scheduler = None
 
-    writer = SummaryWriter(log_dir=f"./logs/{start_of_training}_{model_name}")
+    output_dir = f"./logs/{start_of_training}_{model_name}"
+    writer = SummaryWriter(log_dir=output_dir)
 
     # Resume from checkpoint
     initial_epoch = 0
@@ -246,10 +247,11 @@ def train_model(dataset_directory, model_name, width, height,
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "val_accuracy": val_accuracy,
-            }, f"{model_name}_epoch_{epoch + 1}.pth")
+            }, 
+            os.path.join(output_dir, f"{model_name}_epoch_{epoch + 1}.pth"))
             print(f"Best model saved with accuracy: {val_accuracy:.2f}%")
 
-    print("Training completed. \nTesting...")
+    print("Training completed.")
     # This is to handle the case where some classes don't have enough data to create train/validation/test splits
     if test_loader:
         print('Testing model ...')
