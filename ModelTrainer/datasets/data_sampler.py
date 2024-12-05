@@ -9,6 +9,7 @@ destination_dir = "data/data/images"
 
 # Total number of images in the sample
 total_sample_size = 10000
+min_class_size = 300 
 
 # Create the destination directory
 Path(destination_dir).mkdir(parents=True, exist_ok=True)
@@ -24,8 +25,6 @@ total_images = sum(class_image_counts.values())
 sample_counts = {cls: int((count / total_images) * total_sample_size) for cls, count in class_image_counts.items()}
 
 random.seed(0)
-
-min_class_size = 300 
 
 dropped_classes = []
 # Sample images for each class and copy to the destination folder

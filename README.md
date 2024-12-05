@@ -80,7 +80,14 @@ There are multiple dataset the can be downlaoaded to train the model on
    ```
 
 ### 2. Split Dataset
-Split the extracted dataset into Training, Validation, and Test sets using the provided script:
+1. Create sample of the MUSCIMA++ dataset for training and testing models faster:
+   **Note:** this script create sample based on the specified `total_sample_size` and `min_class_size`. Classes with total size less than `min_class_size` will be ignored. 
+   ```bash
+   python3 ModelTrainer/datasets/data_sampler.py
+   ```
+
+
+2. Split the extracted dataset into Training, Validation, and Test sets using the provided script:
 
    ```bash
    python3 ModelTrainer/datasets/DatasetSplitter.py
