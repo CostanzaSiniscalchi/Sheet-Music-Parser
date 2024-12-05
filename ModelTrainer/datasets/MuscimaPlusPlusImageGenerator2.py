@@ -174,7 +174,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--image_dataset_directory",
         type=str,
-        default="data/data/images",
+        default="data/data/muscima_images",
         help="The directory, where the generated bitmaps will be created")
 
     flags, unparsed = parser.parse_known_args()
