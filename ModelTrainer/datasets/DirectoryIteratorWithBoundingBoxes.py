@@ -1,69 +1,102 @@
 import os
-import torch
+import numpy as np
 from PIL import Image
+import torch
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
 
-class DirectoryIteratorWithBoundingBoxes(torch.utils.data.Dataset):
-    def __init__(self, directory, bounding_boxes=None, target_size=(256, 256), transform=None):
+class DirectoryDatasetWithBoundingBoxes(Dataset):
+    def __init__(self, directory, bounding_boxes: dict = None, target_size=(256, 256),
+                 transform=None, class_mode: str = 'categorical', classes=None):
         """
-        PyTorch Dataset for images with bounding boxes.
-
         Args:
-            directory (str): Path to the directory containing image folders.
-            bounding_boxes (dict): Dictionary with bounding box coordinates for images.
-                                   Format: {'image_name.jpg': [x, y, width, height]}.
-            target_size (tuple): Desired size of the images (height, width).
-            transform (callable, optional): Transform to apply to the images.
+            directory (str): Path to the image directory.
+            bounding_boxes (dict): A dictionary with filenames as keys and bounding box coordinates as values.
+            target_size (tuple): Tuple of target image size (width, height).
+            transform (callable, optional): A function/transform to apply to the images.
+            class_mode (str): One of "categorical", "binary", or "sparse".
+            classes (list, optional): List of class labels.
         """
         self.directory = directory
         self.bounding_boxes = bounding_boxes
         self.target_size = target_size
         self.transform = transform
-        self.samples = []
-        self.classes = []
-        self.class_to_idx = {}
-
-        # Load image paths and labels
-        for class_name in sorted(os.listdir(directory)):
-            class_path = os.path.join(directory, class_name)
-            if os.path.isdir(class_path):
-                class_idx = len(self.classes)
-                self.classes.append(class_name)
-                self.class_to_idx[class_name] = class_idx
-
-                for file_name in sorted(os.listdir(class_path)):
-                    file_path = os.path.join(class_path, file_name)
-                    if os.path.isfile(file_path):
-                        self.samples.append((file_path, class_idx))
-
+        self.class_mode = class_mode
+        self.classes = classes
+        
+        self.filenames = []
+        self.labels = []
+        self.class_to_index = {cls: idx for idx, cls in enumerate(classes)} if classes else None
+        
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if file.lower().endswith(('png', 'jpg', 'jpeg')):
+                    self.filenames.append(os.path.join(root, file))
+                    if self.classes:
+                        class_label = os.path.basename(root)
+                        self.labels.append(self.class_to_index[class_label])
+    
     def __len__(self):
-        return len(self.samples)
-
+        return len(self.filenames)
+    
     def __getitem__(self, idx):
-        """
-        Retrieve an image and its corresponding label and bounding box.
-
-        Args:
-            idx (int): Index of the sample.
-
-        Returns:
-            tuple: (image, label, bounding_box) where bounding_box is a tensor [x, y, width, height].
-        """
-        image_path, label = self.samples[idx]
-        image_name = os.path.basename(image_path)
-
-        # Load and resize image
-        with Image.open(image_path) as img:
-            img = img.convert('RGB')  # Ensure RGB format
-            if self.target_size:
-                img = img.resize(self.target_size)
-
-        # Apply transforms
+        img_path = self.filenames[idx]
+        img = Image.open(img_path).convert("RGB")
+        if self.target_size:
+            img = img.resize(self.target_size)
+        
         if self.transform:
             img = self.transform(img)
+        
+        bounding_box = None
+        if self.bounding_boxes:
+            file_name = os.path.basename(img_path)
+            bounding_box = self.bounding_boxes[file_name]
+            bounding_box = torch.tensor([bounding_box.origin.x, bounding_box.origin.y,
+                                         bounding_box.width, bounding_box.height], dtype=torch.float32)
+        
+        label = None
+        if self.classes:
+            label = self.labels[idx]
+            if self.class_mode == "categorical":
+                label = torch.eye(len(self.classes))[label]
+            elif self.class_mode == "binary":
+                label = torch.tensor(label, dtype=torch.float32)
+            elif self.class_mode == "sparse":
+                label = torch.tensor(label, dtype=torch.long)
+        
+        if self.bounding_boxes:
+            return img, (label, bounding_box)
+        return img, label
 
-        # Get bounding box
-        bounding_box = torch.tensor(self.bounding_boxes[image_name], dtype=torch.float32) \
-            if self.bounding_boxes and image_name in self.bounding_boxes else None
 
-        return img, label, bounding_box
+if __name__ == "__main__":
+    # Example 
+    bounding_boxes = {
+        "image1.jpg": {"origin": {"x": 10, "y": 20}, "width": 50, "height": 30},
+        "image2.jpg": {"origin": {"x": 15, "y": 25}, "width": 40, "height": 35},
+    }
     
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    
+    dataset = DirectoryDatasetWithBoundingBoxes(
+        directory="../data/images/test",
+        bounding_boxes=bounding_boxes,
+        target_size=(192, 96),
+        transform=transform,
+        class_mode="categorical",
+        classes=["class1", "class2"]
+    )
+    
+    dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
+    
+    for batch_x, batch_y in dataloader:
+        print(batch_x.shape)  
+        if isinstance(batch_y, tuple): 
+            print(batch_y[0].shape)  # Shape of labels
+            print(batch_y[1].shape)  # Shape of bounding boxes
+        else:
+            print(batch_y.shape)  # Shape of labels (if no bounding boxes)
