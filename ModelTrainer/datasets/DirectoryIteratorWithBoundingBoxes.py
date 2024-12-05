@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
-class DirectoryDatasetWithBoundingBoxes(Dataset):
+class DirectoryIteratorWithBoundingBoxes(Dataset):
     def __init__(self, directory, bounding_boxes: dict = None, target_size=(256, 256),
                  transform=None, class_mode: str = 'categorical', classes=None):
         """
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
     
-    dataset = DirectoryDatasetWithBoundingBoxes(
+    dataset = DirectoryIteratorWithBoundingBoxes(
         directory="../data/images/test",
         bounding_boxes=bounding_boxes,
         target_size=(192, 96),
