@@ -117,12 +117,17 @@ def load_dataset(dataset_directory, model_name, optimizer_name, height, width, t
     return training_configuration, bounding_boxes, train_loader, val_loader, test_loader
 
 
-def train_loop(training_configuration, model, train_loader, val_loader, device, optimizer, criterion, localization=False, localization_criterion=None, bounding_boxes=None):
-    """Unified training loop for both standard and localization models."""
+def train_loop(training_configuration, model, train_loader, val_loader, device, optimizer, criterion,
+               localization=False, localization_criterion=None, bounding_boxes=None):
+    """Unified training and validation loop for both standard and localization models."""
+    if localization and bounding_boxes is None:
+        raise ValueError("Bounding boxes are required for localization training.")
+
     best_val_accuracy = 0.0
     writer = SummaryWriter(log_dir=f"./logs/{datetime.date.today()}_{training_configuration.name()}")
 
     for epoch in range(training_configuration.number_of_epochs):
+        # Training Phase
         model.train()
         running_loss, correct, total = 0.0, 0, 0
         localization_loss_sum = 0.0
@@ -132,8 +137,6 @@ def train_loop(training_configuration, model, train_loader, val_loader, device, 
             optimizer.zero_grad()
 
             if localization:
-                if bounding_boxes is None:
-                    raise ValueError("Bounding boxes are required for localization training.")
                 classification_output, localization_output = model(inputs)
                 classification_loss = criterion(classification_output, labels)
                 localization_loss = localization_criterion(localization_output, bounding_boxes[labels])
@@ -152,9 +155,56 @@ def train_loop(training_configuration, model, train_loader, val_loader, device, 
             correct += preds.eq(labels).sum().item()
 
         train_accuracy = 100.0 * correct / total
-        print(f"Epoch {epoch + 1}, Loss: {running_loss:.4f}, Accuracy: {train_accuracy:.2f}%")
+        print(f"Epoch {epoch + 1}, Train Loss: {running_loss:.4f}, Accuracy: {train_accuracy:.2f}%")
         writer.add_scalar("Loss/Train", running_loss / len(train_loader), epoch)
         writer.add_scalar("Accuracy/Train", train_accuracy, epoch)
+
+        if localization:
+            writer.add_scalar("Loss/Localization", localization_loss_sum / len(train_loader), epoch)
+
+        # Validation Phase
+        if val_loader:
+            model.eval()
+            val_loss, val_correct, val_total = 0.0, 0, 0
+            val_localization_loss_sum = 0.0
+
+            with torch.no_grad():
+                for inputs, labels in val_loader:
+                    inputs, labels = inputs.to(device), labels.to(device)
+
+                    if localization:
+                        classification_output, localization_output = model(inputs)
+                        classification_loss = criterion(classification_output, labels)
+                        localization_loss = localization_criterion(localization_output, bounding_boxes[labels])
+                        loss = classification_loss + 0.5 * localization_loss
+                        val_localization_loss_sum += localization_loss.item()
+                    else:
+                        classification_output = model(inputs)
+                        loss = criterion(classification_output, labels)
+
+                    val_loss += loss.item()
+                    _, preds = classification_output.max(1)
+                    val_total += labels.size(0)
+                    val_correct += preds.eq(labels).sum().item()
+
+            val_accuracy = 100.0 * val_correct / val_total
+            print(f"Epoch {epoch + 1}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.2f}%")
+            writer.add_scalar("Loss/Validation", val_loss / len(val_loader), epoch)
+            writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
+
+            if localization:
+                writer.add_scalar("Loss/Validation_Localization", val_localization_loss_sum / len(val_loader), epoch)
+
+            # Save best model
+            if val_accuracy > best_val_accuracy:
+                best_val_accuracy = val_accuracy
+                torch.save({
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "val_accuracy": val_accuracy,
+                }, f"./logs/{datetime.date.today()}_{training_configuration.name()}_best_model.pth")
+                print(f"Best model saved with accuracy: {val_accuracy:.2f}%")
 
     writer.close()
     print("Training completed.")
