@@ -112,6 +112,6 @@ Train the selected model using the TrainModel.py script.
 
 Example
    ```bash
-    python3 ModelTrainer/TrainModel.py --dataset_directory data/data --model_name resnet
+    python3 ModelTrainer/TrainModel.py --dataset_directory datasets/data/data --model_name resnet
    ```
 

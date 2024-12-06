@@ -1,6 +1,7 @@
 from typing import List
 from models.resnet50 import ResNet1Configuration
 from models.vgg16 import VggConfiguration
+from models.vgg4WithLocalization import Vgg4WithLocalizationConfiguration
 from models.TrainingConfiguration import TrainingConfiguration
 
 
@@ -26,7 +27,8 @@ class ConfigurationFactory:
     def get_all_configurations(optimizer, width, height, training_minibatch_size, number_of_classes) -> List[
         TrainingConfiguration]:
         configurations = [ResNet1Configuration(optimizer, width, height, training_minibatch_size, number_of_classes),
-                          VggConfiguration(optimizer, width, height, training_minibatch_size, number_of_classes),]
+                          VggConfiguration(optimizer, width, height, training_minibatch_size, number_of_classes),
+                          Vgg4WithLocalizationConfiguration(optimizer, width, height, training_minibatch_size, number_of_classes),]
         return configurations
 
 
