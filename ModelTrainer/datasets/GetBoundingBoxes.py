@@ -1,15 +1,16 @@
 import os
+import pickle as pkl
 import xml.etree.ElementTree as ET
 
 def parse_bounding_boxes_from_xml(xml_directory):
     """
-    Parses XML files to extract bounding box information.
+    Parses XML files to extract multiple bounding box information per image.
 
     Args:
         xml_directory (str): Path to the directory containing XML files.
 
     Returns:
-        dict: A dictionary with image filenames as keys and bounding box coordinates as values.
+        dict: A dictionary with image filenames as keys and lists of bounding box data as values.
     """
     bounding_boxes = {}
 
@@ -20,22 +21,24 @@ def parse_bounding_boxes_from_xml(xml_directory):
             tree = ET.parse(xml_path)
             root = tree.getroot()
 
-            # Extract the document name as the image filename (adjust if necessary)
+            # Extract the document name as the image filename
             document_name = root.attrib['document']
-            image_filename = f"{document_name}.jpg"  # Assuming image files are .jpg
+            image_filename = f"{document_name}.jpg"  # Adjust extension if needed
+
+            # Add an empty list to store bounding boxes
+            if image_filename not in bounding_boxes:
+                bounding_boxes[image_filename] = []
 
             # Extract nodes for bounding boxes
-            bounding_boxes[image_filename] = []  # Each image may have multiple bounding boxes
             for node in root.findall('Node'):
                 left = int(node.find('Left').text)
                 top = int(node.find('Top').text)
                 width = int(node.find('Width').text)
                 height = int(node.find('Height').text)
 
-                # Append the bounding box coordinates as a dictionary
+                # Append the bounding box data
                 bounding_boxes[image_filename].append({
-                    "x": left,
-                    "y": top,
+                    "origin": {"x": left, "y": top},
                     "width": width,
                     "height": height
                 })
@@ -43,6 +46,12 @@ def parse_bounding_boxes_from_xml(xml_directory):
     return bounding_boxes
 
 # Example usage
-xml_directory = "./annotations"  # Path to XML directory
+xml_directory = "./data/data/muscima_pp_raw/v2.0/data/annotations"  # Path to directory with XML files
+output_path = "./data/data/muscima_pp_raw/v2.0/data/bounding_boxes.pkl"
 bounding_boxes = parse_bounding_boxes_from_xml(xml_directory)
-print(bounding_boxes)
+# print(bounding_boxes)
+# Write the dictionary to the JSON file
+with open(output_path, 'wb') as file:
+    pkl.dump(bounding_boxes, file)
+
+print(f"Bounding boxes saved to: {output_path}")

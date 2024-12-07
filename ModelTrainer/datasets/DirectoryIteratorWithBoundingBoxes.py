@@ -1,52 +1,108 @@
 import os
-import json
-import xml.etree.ElementTree as ET
+import numpy as np
+from PIL import Image
+import torch
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
 
-def parse_bounding_boxes_from_xml(xml_directory):
-    """
-    Parses XML files to extract bounding box information.
+class DirectoryIteratorWithBoundingBoxes(Dataset):
+    def __init__(self, directory, bounding_boxes=None, target_size=(256, 256),
+                 transform=None, class_mode='categorical', classes=None):
+        """
+        Args:
+            directory (str): Path to the image directory.
+            bounding_boxes (dict): Dictionary with filenames as keys and bounding box coordinates as values.
+            target_size (tuple): Image size (width, height).
+            transform (callable): Transformations to apply to the images.
+            class_mode (str): 'categorical', 'binary', or 'sparse'.
+            classes (list): List of class names.
+        """
+        self.directory = directory
+        self.bounding_boxes = bounding_boxes
+        self.target_size = target_size
+        self.transform = transform
+        self.class_mode = class_mode
+        self.classes = classes
+        
+        self.filenames = []
+        self.labels = []
+        self.class_to_idx = {cls: idx for idx, cls in enumerate(classes)} if classes else None
 
-    Args:
-        xml_directory (str): Path to the directory containing XML files.
+        # Load filenames and labels
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if file.lower().endswith(('png', 'jpg', 'jpeg')):
+                    self.filenames.append(os.path.join(root, file))
+                    if self.classes:
+                        class_label = os.path.basename(root)
+                        self.labels.append(self.class_to_idx[class_label])
 
-    Returns:
-        dict: A dictionary with image filenames as keys and bounding box data as values.
-    """
-    bounding_boxes = {}
+    def __len__(self):
+        return len(self.filenames)
+    
+    def __getitem__(self, idx):
+        # Load image
+        img_path = self.filenames[idx]
+        img = Image.open(img_path).convert("RGB").resize(self.target_size)
 
-    # Iterate through XML files in the directory
-    for xml_file in os.listdir(xml_directory):
-        if xml_file.endswith(".xml"):
-            xml_path = os.path.join(xml_directory, xml_file)
-            tree = ET.parse(xml_path)
-            root = tree.getroot()
+        if self.transform:
+            img = self.transform(img)
 
-            # Extract the document name as the image filename
-            document_name = root.attrib['document']
-            image_filename = f"{document_name}.jpg"  # Assuming images are .jpg files
+        # Load bounding box
+        file_name = os.path.basename(img_path)
+        bounding_box = torch.zeros((4,), dtype=torch.float32)  # Default bounding box (zeroed)
+        if self.bounding_boxes and file_name in self.bounding_boxes:
+            bbox = self.bounding_boxes[file_name]
+            bounding_box = torch.tensor([bbox['origin']['x'], bbox['origin']['y'], 
+                                         bbox['width'], bbox['height']], dtype=torch.float32)
 
-            for node in root.findall('Node'):
-                left = int(node.find('Left').text)
-                top = int(node.find('Top').text)
-                width = int(node.find('Width').text)
-                height = int(node.find('Height').text)
-
-                # Store bounding box in the required format
-                bounding_boxes[image_filename] = {
-                    "origin": {"x": left, "y": top},
-                    "width": width,
-                    "height": height
-                }
-
-    return bounding_boxes
+        # Load label
+        if self.classes:
+            label = self.labels[idx]
+            if self.class_mode == 'categorical':
+                label = torch.eye(len(self.classes))[label]
+            elif self.class_mode == 'binary':
+                label = torch.tensor(label, dtype=torch.float32)
+            elif self.class_mode == 'sparse':
+                label = torch.tensor(label, dtype=torch.long)
+            return img, (label, bounding_box)
+        else:
+            return img, bounding_box
 
 # Example usage
-xml_directory = "/Users/costanzasiniscalchi/Documents/MS/DLCV/Sheet-Music-Parser/ModelTrainer/datasets/data/data/muscima_pp_raw/v2.0/data/annotations"  # Path to directory with XML files
-output_json_path = "/Users/costanzasiniscalchi/Documents/MS/DLCV/Sheet-Music-Parser/ModelTrainer/datasets/data/data/muscima_pp_raw/v2.0/data/bounding_boxes.json"
-bounding_boxes = parse_bounding_boxes_from_xml(xml_directory)
-print(bounding_boxes)
-# Write the dictionary to the JSON file
-with open(output_json_path, 'w') as json_file:
-    json.dump(bounding_boxes, json_file, indent=4)
+if __name__ == "__main__":
+    # Example bounding boxes
+    bounding_boxes = {
+        "image1.jpg": {"origin": {"x": 10, "y": 20}, "width": 50, "height": 30},
+        "image2.jpg": {"origin": {"x": 15, "y": 25}, "width": 40, "height": 35},
+    }
 
-print(f"Bounding boxes saved to: {output_json_path}")
+    # Define transformations
+    transform = transforms.Compose([
+        transforms.Resize((192, 96)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    # Create dataset and data loader
+    dataset = DirectoryIteratorWithBoundingBoxes(
+        directory="../data/images/test",
+        bounding_boxes=bounding_boxes,
+        target_size=(192, 96),
+        transform=transform,
+        class_mode="categorical",
+        classes=["class1", "class2"]
+    )
+
+    dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
+
+    # Iterate through batches
+    for batch_x, batch_y in dataloader:
+        print("Batch of images shape:", batch_x.shape)
+        if isinstance(batch_y, tuple):
+            labels, bboxes = batch_y
+            print("Batch of labels shape:", labels.shape)
+            print("Batch of bounding boxes shape:", bboxes.shape)
+        else:
+            print("Batch of bounding boxes shape:", batch_y.shape)
+        break
