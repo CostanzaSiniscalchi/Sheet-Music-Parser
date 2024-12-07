@@ -70,6 +70,11 @@ There are multiple dataset the can be downlaoaded to train the model on
    python3 ModelTrainer/datasets/MuscimaPlusPlusImageGenerator2.py
    ```
 
+   Run the `GetBoundingBoxes.py` script to obtain the bounding boxes for this dataset in the json `boundingboxes.json` under the image directory. This data can be used for the localization models.
+   ```bash
+   python3 ModelTrainer/datasets/GetBoundingBoxes.py
+   ```
+
 - OpenOMR Dataset
 
    This dataset contains 1000 score images of Typeset music sheets. This data can be used for Symbol Classification task.
