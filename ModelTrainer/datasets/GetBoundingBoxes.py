@@ -35,9 +35,13 @@ def parse_bounding_boxes_from_xml(xml_directory):
                 top = int(node.find('Top').text)
                 width = int(node.find('Width').text)
                 height = int(node.find('Height').text)
+                id = int(node.find('Id').text)
+                classname = node.find('ClassName').text
 
                 # Append the bounding box data
                 bounding_boxes[image_filename].append({
+                    'id': id,
+                    'className': classname,
                     "origin": {"x": left, "y": top},
                     "width": width,
                     "height": height
