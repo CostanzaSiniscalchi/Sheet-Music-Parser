@@ -23,7 +23,7 @@ def parse_bounding_boxes_from_xml(xml_directory):
 
             # Extract the document name as the image filename
             document_name = root.attrib['document']
-            image_filename = f"{document_name}.jpg"  # Adjust extension if needed
+            image_filename = f"{document_name}.png"  # Adjust extension if needed
 
             # Add an empty list to store bounding boxes
             if image_filename not in bounding_boxes:
@@ -49,8 +49,8 @@ def parse_bounding_boxes_from_xml(xml_directory):
 xml_directory = "./data/data/muscima_pp_raw/v2.0/data/annotations"  # Path to directory with XML files
 output_path = "./data/data/muscima_pp_raw/v2.0/data/bounding_boxes.pkl"
 bounding_boxes = parse_bounding_boxes_from_xml(xml_directory)
-# print(bounding_boxes)
-# Write the dictionary to the JSON file
+print(bounding_boxes['CVC-MUSCIMA_W-28_N-05_D-ideal.png'])
+# Write the dictionary to the pkl file
 with open(output_path, 'wb') as file:
     pkl.dump(bounding_boxes, file)
 
