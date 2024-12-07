@@ -70,11 +70,6 @@ There are multiple dataset the can be downlaoaded to train the model on
    python3 ModelTrainer/datasets/MuscimaPlusPlusImageGenerator2.py
    ```
 
-   Run the `GetBoundingBoxes.py` script to obtain the bounding boxes for this dataset in the json `boundingboxes.json` under the image directory. This data can be used for the localization models.
-   ```bash
-   python3 ModelTrainer/datasets/GetBoundingBoxes.py
-   ```
-
 - OpenOMR Dataset
 
    This dataset contains 1000 score images of Typeset music sheets. This data can be used for Symbol Classification task.
@@ -120,3 +115,24 @@ Example
     python3 ModelTrainer/TrainModel.py --dataset_directory datasets/data/data --model_name resnet
    ```
 
+## Localization Preparation
+
+### 1. Split MUSCIMA++ Dataset
+Run the `DatasetSplitter.py` script to split the MUSCIMA data into train, validation, and test sets.
+```bash
+python DatasetSplitter.py --source_directory data/data/muscima_pp_raw/v2.0/data --destination_directory data/data/muscima_pp_raw/v2.0/data/images
+```
+   This will organize the dataset into:
+
+   ```bash
+    data/images/
+            training/
+            validation/
+            test/
+   ```
+
+## 2. Get Bounding Boxes for MUSCIMA++ Dataset
+   Run the `GetBoundingBoxes.py` script to obtain the bounding boxes for this dataset in the pickle file `boundingboxes.pkl` under the image directory. This data can be used for the localization models.
+   ```bash
+   python3 ModelTrainer/datasets/GetBoundingBoxes.py
+   ```
