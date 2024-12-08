@@ -54,7 +54,7 @@ class DirectoryIteratorWithBoundingBoxes(Dataset):
                 x, y = bbox['origin']['x'], bbox['origin']['y']
                 width, height = bbox['width'], bbox['height']
                 bbox_class = bbox['className'] if 'className' in bbox else None
-                print(bbox_class)
+                # print(bbox_class)
 
                 # Append bounding box coordinates
                 bounding_boxes.append([x, y, width, height])

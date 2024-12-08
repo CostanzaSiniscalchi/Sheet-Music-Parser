@@ -41,14 +41,9 @@ class Vgg4Model(nn.Module):
         self.conv_block4 = self._create_conv_block(128, 256, layers=3)
         self.conv_block5 = self._create_conv_block(256, 512, layers=3, pooling="avg")
 
-        # Dynamically calculate the size of the flattened feature vector
-        with torch.no_grad():
-            dummy_input = torch.zeros(1, *input_shape)
-            flattened_size = self._get_flattened_size(dummy_input)
-
-        self.flatten = nn.Flatten()
-        self.classification_head = nn.Linear(flattened_size, num_classes)
-        self.regression_head = nn.Linear(flattened_size, 4)
+        # Feature map outputs (for predictions per region)
+        self.classification_head = nn.Conv2d(512, num_classes, kernel_size=3, padding=1)
+        self.regression_head = nn.Conv2d(512, 4, kernel_size=3, padding=1)  # Predict x, y, w, h
 
     def _create_conv_block(self, in_channels, out_channels, kernel_size=3, layers=2, pooling="max"):
         modules = []
@@ -63,25 +58,19 @@ class Vgg4Model(nn.Module):
             modules.append(nn.AvgPool2d(kernel_size=2, stride=2))
         return nn.Sequential(*modules)
 
-    def _get_flattened_size(self, x):
-        """Pass a dummy tensor through the convolutional layers to calculate the flattened size."""
-        x = self.conv_block1(x)
-        x = self.conv_block2(x)
-        x = self.conv_block3(x)
-        x = self.conv_block4(x)
-        x = self.conv_block5(x)
-        return x.view(1, -1).size(1)  # Flatten and get the size
-
     def forward(self, x):
         x = self.conv_block1(x)
         x = self.conv_block2(x)
         x = self.conv_block3(x)
         x = self.conv_block4(x)
         x = self.conv_block5(x)
-        features = self.flatten(x)
-        classification_output = F.softmax(self.classification_head(features), dim=1)
-        regression_output = self.regression_head(features)  # No activation for regression
-        return classification_output, regression_output
+
+        # Predictions
+        class_preds = self.classification_head(x)  # Shape: [B, num_classes, H, W]
+        bbox_preds = self.regression_head(x)       # Shape: [B, 4, H, W]
+        
+        return class_preds, bbox_preds
+
 
 
 
