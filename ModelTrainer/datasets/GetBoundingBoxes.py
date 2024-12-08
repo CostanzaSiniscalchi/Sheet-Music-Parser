@@ -50,12 +50,14 @@ def parse_bounding_boxes_from_xml(xml_directory):
     return bounding_boxes
 
 # Example usage
-xml_directory = "./data/data/muscima_pp_raw/v2.0/data/annotations"  # Path to directory with XML files
-output_path = "./data/data/muscima_pp_raw/v2.0/data/bounding_boxes.pkl"
-bounding_boxes = parse_bounding_boxes_from_xml(xml_directory)
-print(bounding_boxes['CVC-MUSCIMA_W-28_N-05_D-ideal.png'])
-# Write the dictionary to the pkl file
-with open(output_path, 'wb') as file:
-    pkl.dump(bounding_boxes, file)
+splits = ['test', 'train', 'val']
+for split in splits:
+    xml_directory = "./data/data/muscima_split/" + split + '/annotations'  # Path to directory with XML files
+    output_path = "./data/data/muscima_split/" + split + "/bounding_boxes.pkl"
+    bounding_boxes = parse_bounding_boxes_from_xml(xml_directory)
+    # print(bounding_boxes['CVC-MUSCIMA_W-28_N-05_D-ideal.png'])
+    # Write the dictionary to the pkl file
+    with open(output_path, 'wb') as file:
+        pkl.dump(bounding_boxes, file)
 
-print(f"Bounding boxes saved to: {output_path}")
+    print(f"Bounding boxes saved to: {output_path}")

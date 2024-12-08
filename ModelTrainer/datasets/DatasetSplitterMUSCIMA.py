@@ -4,15 +4,16 @@ import json
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-def split_strat(output_root, sheet_music_root, bbox_root, class_split_json="MUSCIMA_class_splits.json", min_cases=100):
+def split_strat(output_root, sheet_music_root, bbox_root, annotations_root, class_split_json="MUSCIMA_class_splits.json", min_cases=100):
     """
-    Splits sheet music files and bounding box files into train, val, and test sets,
+    Splits sheet music files, bounding box files, and annotation files into train, val, and test sets,
     ensuring no file duplication and ignoring classes with fewer than 'min_cases'.
 
     Args:
         output_root (str): Path to the output directory for the splits.
         sheet_music_root (str): Path to the directory containing whole sheet music files.
         bbox_root (str): Path to the directory containing bounding box images in class-specific subdirectories.
+        annotations_root (str): Path to the directory containing annotation files (XML).
         class_split_json (str): Name of the JSON file to store class distribution summary.
         min_cases (int): Minimum number of bounding boxes required for a class to be included.
 
@@ -30,7 +31,9 @@ def split_strat(output_root, sheet_music_root, bbox_root, class_split_json="MUSC
             count = 0
             for bbox_file in os.listdir(class_path):
                 if bbox_file.endswith('.png'):
-                    sheet_file = "_".join(bbox_file.split("_")[:-1]) + ".png"
+                    # Extract base name from the bounding box file
+                    base_name = bbox_file.split("___")[1]  # Keeps the middle part
+                    sheet_file = base_name.split("___")[0] + ".png"  # Add .png extension
                     if sheet_file not in sheet_to_boxes:
                         sheet_to_boxes[sheet_file] = []
                     sheet_to_boxes[sheet_file].append((class_folder, bbox_file))
@@ -50,6 +53,8 @@ def split_strat(output_root, sheet_music_root, bbox_root, class_split_json="MUSC
 
     # Step 3: Prepare data
     sheet_files = list(filtered_sheets.keys())
+    sheet_music_files = os.listdir(sheet_music_root)
+    annotation_files = os.listdir(annotations_root)
 
     # Check if there are enough files to split
     if len(sheet_files) < 10:
@@ -58,7 +63,7 @@ def split_strat(output_root, sheet_music_root, bbox_root, class_split_json="MUSC
     # Labels: count bounding boxes per sheet file
     labels = [len(filtered_sheets[sheet]) for sheet in sheet_files]
 
-    # Fallback: check for minimum stratification criteria
+    # Step 4: Perform stratified split
     try:
         train_files, test_files = train_test_split(sheet_files, test_size=0.1, random_state=42, stratify=labels)
         train_files, val_files = train_test_split(train_files, test_size=0.1, random_state=42, stratify=[labels[sheet_files.index(f)] for f in train_files])
@@ -69,22 +74,35 @@ def split_strat(output_root, sheet_music_root, bbox_root, class_split_json="MUSC
 
     splits = {"train": train_files, "val": val_files, "test": test_files}
 
-    # Step 4: Create output directories
+    # Step 5: Create output directories
     for split in splits:
         os.makedirs(os.path.join(output_root, split, "sheet_music"), exist_ok=True)
+        os.makedirs(os.path.join(output_root, split, "annotations"), exist_ok=True)
         os.makedirs(os.path.join(output_root, split, "bounding_boxes"), exist_ok=True)
         for class_folder in valid_classes.keys():
             os.makedirs(os.path.join(output_root, split, "bounding_boxes", class_folder), exist_ok=True)
 
-    # Step 5: Copy files and track class counts
+    # Step 6: Copy files and track class counts
     class_count = {split: {} for split in splits}
     for split, sheet_list in splits.items():
         for sheet_file in sheet_list:
             # Copy sheet music file
-            src_sheet = os.path.join(sheet_music_root, sheet_file)
-            dst_sheet = os.path.join(output_root, split, "sheet_music", sheet_file)
-            if os.path.exists(src_sheet):
+            if sheet_file in sheet_music_files:
+                src_sheet = os.path.join(sheet_music_root, sheet_file)
+                dst_sheet = os.path.join(output_root, split, "sheet_music", sheet_file)
                 shutil.copy(src_sheet, dst_sheet)
+
+                # Copy corresponding annotation file (XML)
+                annotation_file = sheet_file.replace('.png', '.xml')
+                if annotation_file in annotation_files:
+                    src_annotation = os.path.join(annotations_root, annotation_file)
+                    dst_annotation = os.path.join(output_root, split, "annotations", annotation_file)
+                    shutil.copy(src_annotation, dst_annotation)
+                else:
+                    print(f"Warning: Annotation file '{annotation_file}' not found in '{annotations_root}'.")
+
+            else:
+                print(f"Warning: Sheet music file '{sheet_file}' not found in '{sheet_music_root}'.")
 
             # Copy bounding box files
             for class_folder, bbox_file in filtered_sheets[sheet_file]:
@@ -98,7 +116,7 @@ def split_strat(output_root, sheet_music_root, bbox_root, class_split_json="MUSC
                     class_count[split][class_folder] = 0
                 class_count[split][class_folder] += 1
 
-    # Step 6: Save class splits to JSON
+    # Step 7: Save class splits to JSON
     with open(class_split_json, "w") as json_file:
         json.dump(class_count, json_file, indent=4)
 
@@ -112,5 +130,6 @@ if __name__ == "__main__":
     output_root = "/Users/costanzasiniscalchi/Documents/MS/DLCV/Sheet-Music-Parser/ModelTrainer/datasets/data/data/muscima_split"  # Directory to save the splits
     sheet_music_root = "/Users/costanzasiniscalchi/Documents/MS/DLCV/Sheet-Music-Parser/ModelTrainer/datasets/data/data/muscima_pp_raw/v2.0/data/images"  # Whole sheet music files
     bbox_root = "/Users/costanzasiniscalchi/Documents/MS/DLCV/Sheet-Music-Parser/ModelTrainer/datasets/data/data/muscima_images"  # Bounding box images in class-specific folders
-    split_strat(output_root, sheet_music_root, bbox_root, min_cases=100)
+    annotations_root = "/Users/costanzasiniscalchi/Documents/MS/DLCV/Sheet-Music-Parser/ModelTrainer/datasets/data/data/muscima_pp_raw/v2.0/data/annotations"
+    split_strat(output_root, sheet_music_root, bbox_root, annotations_root, min_cases=100)
 
