@@ -11,7 +11,7 @@ class DirectoryIteratorWithBoundingBoxes(Dataset):
         """
         Args:
             directory (str): Path to the image directory.
-            bounding_boxes (dict): Dictionary with filenames as keys and bounding box coordinates as values.
+            bounding_boxes (dict): Dictionary with filenames as keys and bounding box annotations.
             target_size (tuple): Image size (width, height).
             transform (callable): Transformations to apply to the images.
             class_mode (str): 'categorical', 'binary', or 'sparse'.
@@ -23,19 +23,14 @@ class DirectoryIteratorWithBoundingBoxes(Dataset):
         self.transform = transform
         self.class_mode = class_mode
         self.classes = classes
-        
-        self.filenames = []
-        self.labels = []
         self.class_to_idx = {cls: idx for idx, cls in enumerate(classes)} if classes else None
 
-        # Load filenames and labels
+        # Load filenames
+        self.filenames = []
         for root, _, files in os.walk(directory):
             for file in files:
                 if file.lower().endswith(('png', 'jpg', 'jpeg')):
                     self.filenames.append(os.path.join(root, file))
-                    if self.classes:
-                        class_label = os.path.basename(root)
-                        self.labels.append(self.class_to_idx[class_label])
 
     def __len__(self):
         return len(self.filenames)
@@ -48,26 +43,36 @@ class DirectoryIteratorWithBoundingBoxes(Dataset):
         if self.transform:
             img = self.transform(img)
 
-        # Load bounding box
+        # Load bounding boxes and labels
         file_name = os.path.basename(img_path)
-        bounding_box = torch.zeros((4,), dtype=torch.float32)  # Default bounding box (zeroed)
-        if self.bounding_boxes and file_name in self.bounding_boxes:
-            bbox = self.bounding_boxes[file_name]
-            bounding_box = torch.tensor([bbox['origin']['x'], bbox['origin']['y'], 
-                                         bbox['width'], bbox['height']], dtype=torch.float32)
+        bounding_boxes = []
+        labels = []
 
-        # Load label
-        if self.classes:
-            label = self.labels[idx]
-            if self.class_mode == 'categorical':
-                label = torch.eye(len(self.classes))[label]
-            elif self.class_mode == 'binary':
-                label = torch.tensor(label, dtype=torch.float32)
-            elif self.class_mode == 'sparse':
-                label = torch.tensor(label, dtype=torch.long)
-            return img, (label, bounding_box)
-        else:
-            return img, bounding_box
+        if self.bounding_boxes and file_name in self.bounding_boxes:
+            bboxes = self.bounding_boxes[file_name]
+            for bbox in bboxes:  # Iterate through all bounding boxes for this image
+                x, y = bbox['origin']['x'], bbox['origin']['y']
+                width, height = bbox['width'], bbox['height']
+                bbox_class = bbox['className'] if 'className' in bbox else None
+                print(bbox_class)
+
+                # Append bounding box coordinates
+                bounding_boxes.append([x, y, width, height])
+
+                # Append class index
+                if bbox_class in self.classes:
+                    labels.append(self.class_to_idx[bbox_class])
+                else:
+                    raise ValueError(f"Class '{bbox_class}' not found in class list.")
+
+        # Convert to tensors
+        bounding_boxes = torch.tensor(bounding_boxes, dtype=torch.float32)  # [num_boxes, 4]
+        labels = torch.tensor(labels, dtype=torch.long)  # [num_boxes]
+
+        return img, (labels, bounding_boxes)
+
+
+
 
 # Example usage
 if __name__ == "__main__":
