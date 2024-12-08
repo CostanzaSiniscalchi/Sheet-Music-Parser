@@ -231,8 +231,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     training_configuration, bounding_boxes, train_loader, val_loader, test_loader, class_weights_tensor = load_dataset(
-        args.dataset_directory, args.model_name, args.optimizer, 192, 96, args.minibatch_size.
-        class_weights_balancing_method
+        args.dataset_directory, args.model_name, args.optimizer, 192, 96, args.minibatch_size,
+        args.class_weights_balancing_method
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = training_configuration.classifier().to(device)
