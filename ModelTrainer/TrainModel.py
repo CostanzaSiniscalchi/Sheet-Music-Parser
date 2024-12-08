@@ -54,7 +54,8 @@ class FilteredImageFolder(DatasetFolder):
 
 
 
-def load_dataset(dataset_directory, model_name, optimizer_name, height, width, training_minibatch_size):
+def load_dataset(dataset_directory, model_name, optimizer_name, height, width, training_minibatch_size,
+                 class_weights_balancing_method):
     """Load the dataset and prepare data loaders."""
     image_dataset_directory = os.path.join(dataset_directory, "images")
     bounding_boxes_cache = os.path.join(dataset_directory, "bounding_boxes.txt")
@@ -114,7 +115,17 @@ def load_dataset(dataset_directory, model_name, optimizer_name, height, width, t
     val_loader = DataLoader(val_dataset, batch_size=training_minibatch_size, shuffle=False) if val_dataset else None
     test_loader = DataLoader(test_dataset, batch_size=training_minibatch_size, shuffle=False) if test_dataset else None
 
-    return training_configuration, bounding_boxes, train_loader, val_loader, test_loader
+    # Add class weight calculator 
+        # Loss and optimizer
+    if class_weights_balancing_method:
+        class_weight_calculator = ClassWeightCalculator()
+        class_weights = class_weight_calculator.calculate_class_weights(image_dataset_directory, method=class_weights_balancing_method)
+        class_weights_tensor = torch.tensor(list(class_weights.values()), dtype=torch.float).to(device)
+    else:
+        class_weights_tensor = None
+
+
+    return training_configuration, bounding_boxes, train_loader, val_loader, test_loader, class_weights_tensor
 
 
 def train_loop(training_configuration, model, train_loader, val_loader, device, optimizer, criterion,
@@ -216,15 +227,17 @@ if __name__ == "__main__":
     parser.add_argument("--model_name", required=True, choices=["resnet", "vgg", "vgg4_with_localization"], type=str)
     parser.add_argument("--minibatch_size", type=int, default=32)
     parser.add_argument("--optimizer", type=str, default="Adam")
+    parser.add_argument("--class_weights_balancing_method", type=str, default=None)
     args = parser.parse_args()
 
-    training_configuration, bounding_boxes, train_loader, val_loader, test_loader = load_dataset(
-        args.dataset_directory, args.model_name, args.optimizer, 192, 96, args.minibatch_size
+    training_configuration, bounding_boxes, train_loader, val_loader, test_loader, class_weights_tensor = load_dataset(
+        args.dataset_directory, args.model_name, args.optimizer, 192, 96, args.minibatch_size.
+        class_weights_balancing_method
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = training_configuration.classifier().to(device)
     optimizer = getattr(optim, args.optimizer)(model.parameters(), lr=0.001)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
 
     if hasattr(training_configuration, "performs_localization") and training_configuration.performs_localization():
         train_loop(training_configuration, model, train_loader, val_loader, device, optimizer, criterion,
