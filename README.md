@@ -120,7 +120,7 @@ Example
 ### 1. Split MUSCIMA++ Dataset
 Run the `DatasetSplitter.py` script to split the MUSCIMA data into train, validation, and test sets.
 ```bash
-python DatasetSplitter.py --source_directory data/data/muscima_pp_raw/v2.0/data --destination_directory data/data/muscima_pp_raw/v2.0/data/images
+python ModelTrainer/datasets/DatasetSplitter.py --source_directory data/data/muscima_pp_raw/v2.0/data --destination_directory data/data/muscima_pp_raw/v2.0/data/images
 ```
    This will organize the dataset into:
 

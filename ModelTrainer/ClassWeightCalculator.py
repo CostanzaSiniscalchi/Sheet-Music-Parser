@@ -58,14 +58,14 @@ class ClassWeightCalculator:
             balanced_class_weights = class_weight.compute_class_weight('balanced', classes, y)
             class_weights = dict(zip(classes, balanced_class_weights))
 
-        class_weights_with_indices = dict()
+        # class_weights_with_indices = dict()
 
-        # Keras does not expect a dictionary with class-names as keys, but with class-indices as keys of the dictionary,
-        # therefore we have to recreate the dicitionary.
-        for class_name in class_weights.keys():
-            class_weights_with_indices[class_indices[class_name]] = class_weights[class_name]
+        # # Keras does not expect a dictionary with class-names as keys, but with class-indices as keys of the dictionary,
+        # # therefore we have to recreate the dicitionary.
+        # for class_name in class_weights.keys():
+        #     class_weights_with_indices[class_indices[class_name]] = class_weights[class_name]
 
-        return class_weights_with_indices
+        return class_weights
 
 
 if __name__ == "__main__":
