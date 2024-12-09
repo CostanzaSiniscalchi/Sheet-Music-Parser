@@ -97,6 +97,7 @@ class ResNetlWithLocalization(nn.Module):
         x = F.relu(x)
         x = self.block5c[0](x) + self.block5c[1](x)
         x = F.relu(x)
+        
         x = self.pool5(x)
 
         x = self.flatten(x)
