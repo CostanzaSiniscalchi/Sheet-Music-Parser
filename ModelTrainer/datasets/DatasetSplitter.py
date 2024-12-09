@@ -106,7 +106,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--source_directory",
         type=str,
-        default="data/data/images",
+        default="data/data/sample_images",
         help="The directory, where the images should be copied from")
     parser.add_argument(
         "--destination_directory",

@@ -12,33 +12,50 @@ from sklearn.metrics import classification_report
 from models.ConfigurationFactory import ConfigurationFactory
 from datasets.DirectoryIteratorWithBoundingBoxes import DirectoryIteratorWithBoundingBoxes
 from ClassWeightCalculator import ClassWeightCalculator
+from torchvision.datasets import DatasetFolder
+from torchvision.datasets.folder import IMG_EXTENSIONS, default_loader
 from torchvision.datasets import ImageFolder
-from torchvision.datasets.folder import DatasetFolder, IMG_EXTENSIONS, default_loader
 
+# Custom ImageFolder to handle classes with empty folders for validation/test sets
 
 class FilteredImageFolder(DatasetFolder):
-    """Custom ImageFolder to handle classes with empty folders."""
     def __init__(self, root, transform=None, extensions=None):
         self.root = root
         self.extensions = extensions or IMG_EXTENSIONS
         self.loader = default_loader
+
+        # Find classes and their indices
         classes, class_to_idx = self.find_classes(root)
-        samples = self.make_dataset(root, class_to_idx, self.extensions, is_valid_file=None)
-        valid_classes = {c for c, idx in class_to_idx.items() if any(s[1] == idx for s in samples)}
+
+        # Filter classes with no valid files
+        samples = self.make_dataset(root, class_to_idx, self.extensions, self.is_valid_file)
+        valid_classes = {class_name for class_name, idx in class_to_idx.items() if any(s[1] == idx for s in samples)}
 
         if len(valid_classes) == 0:
             print(f"Warning: No valid files found in {root}. Skipping this dataset.")
+            self.classes = []
+            self.class_to_idx = {}
+            self.samples = []
             super().__init__(root, loader=self.loader, extensions=self.extensions, transform=transform)
             return
 
+        # Update class_to_idx with valid classes only
         self.classes = sorted(valid_classes)
-        self.class_to_idx = {c: i for i, c in enumerate(self.classes)}
+        self.class_to_idx = {class_name: i for i, class_name in enumerate(self.classes)}
+
+        # Filter samples to include only valid classes
         self.samples = [(s[0], self.class_to_idx[classes[s[1]]]) for s in samples if classes[s[1]] in valid_classes]
+
+        # Initialize DatasetFolder with filtered samples
         super().__init__(root, loader=self.loader, extensions=self.extensions, transform=transform)
 
-    def make_dataset(self, directory, class_to_idx, extensions, is_valid_file=None):
+    def make_dataset(self, directory, class_to_idx, extensions, is_valid_file=None, allow_empty=None):
+        """
+        Creates a dataset, excluding classes with no valid files.
+        """
         instances = []
         for target_class in sorted(class_to_idx.keys()):
+            class_index = class_to_idx[target_class]
             target_dir = os.path.join(directory, target_class)
             if not os.path.isdir(target_dir):
                 continue
@@ -47,200 +64,281 @@ class FilteredImageFolder(DatasetFolder):
                     path = os.path.join(root, fname)
                     if is_valid_file is not None:
                         if is_valid_file(path):
-                            instances.append((path, class_to_idx[target_class]))
+                            instances.append((path, class_index))
                     elif path.lower().endswith(tuple(extensions)):
-                        instances.append((path, class_to_idx[target_class]))
+                        instances.append((path, class_index))
         return instances
 
+    def is_valid_file(self, path):
+        """
+        Checks if a file has a valid extension.
+        """
+        return path.lower().endswith(tuple(self.extensions))
 
 
-def load_dataset(dataset_directory, model_name, optimizer_name, height, width, training_minibatch_size,
-                 class_weights_balancing_method):
-    """Load the dataset and prepare data loaders."""
+def compute_dataset_statistics(data_loader):
+    """
+    Compute mean and standard deviation of the dataset dynamically.
+    """
+    mean = 0.0
+    std = 0.0
+    total_samples = 0
+    for inputs, _ in data_loader:
+        batch_samples = inputs.size(0)
+        inputs = inputs.view(batch_samples, inputs.size(1), -1)
+        mean += inputs.mean(2).sum(0)
+        std += inputs.std(2).sum(0)
+        total_samples += batch_samples
+
+    mean /= total_samples
+    std /= total_samples
+
+    return mean.tolist(), std.tolist()  
+
+def train_model(dataset_directory, model_name, width, height,
+                training_minibatch_size, optimizer_name, dynamic_learning_rate_reduction,
+                class_weights_balancing_method, save_after_every_epoch, resume_from_checkpoint):
+    
+    # Ensure device compatibility
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    start_of_training = datetime.date.today()
+
+    # Dataset paths
     image_dataset_directory = os.path.join(dataset_directory, "images")
     bounding_boxes_cache = os.path.join(dataset_directory, "bounding_boxes.txt")
     bounding_boxes = None
 
     print("Loading configuration and data-readers...")
     number_of_classes = len(os.listdir(os.path.join(image_dataset_directory, "training")))
+    print(f'Number of classes = {number_of_classes}')
     training_configuration = ConfigurationFactory.get_configuration_by_name(
         model_name, optimizer_name, width, height, training_minibatch_size, number_of_classes
     )
 
+    # Load bounding boxes if localization is required
     if os.path.exists(bounding_boxes_cache):
         with open(bounding_boxes_cache, "rb") as cache:
             bounding_boxes = pickle.load(cache)
-    else:
-        print("Bounding boxes file not found. Ensure it exists if localization is required.")
-        bounding_boxes = None
 
+
+    # Temporary DataLoader to compute mean and std
+    temp_transform = transforms.Compose([
+        transforms.Resize((height, width)),
+        transforms.ToTensor(),
+    ])
+    temp_dataset = ImageFolder(os.path.join(image_dataset_directory, "training"), transform=temp_transform)
+    temp_loader = DataLoader(temp_dataset, batch_size=training_minibatch_size, shuffle=False)
+
+    # Compute mean and std
+    mean, std = compute_dataset_statistics(temp_loader)
+    print(f"Computed Mean: {mean}, Std: {std}")
+
+    # Data augmentation and preprocessing
     train_transform = transforms.Compose([
         transforms.Resize((height, width)),
-        transforms.RandomRotation(10),
-        transforms.RandomResizedCrop((height, width), scale=(1.0 - 0.2, 1.0)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(30),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+        transforms.RandomResizedCrop((height, width), scale=(0.8, 1.0)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.Normalize(mean=mean, std=std),
     ])
     val_test_transform = transforms.Compose([
         transforms.Resize((height, width)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.Normalize(mean=mean, std=std),
     ])
 
-    if bounding_boxes:
+    # Load datasets
+    if bounding_boxes is not None:
         train_dataset = DirectoryIteratorWithBoundingBoxes(
             directory=os.path.join(image_dataset_directory, "training"),
             bounding_boxes=bounding_boxes,
             target_size=(height, width),
-            transform=train_transform,
+            transform=train_transform
         )
         val_dataset = DirectoryIteratorWithBoundingBoxes(
             directory=os.path.join(image_dataset_directory, "validation"),
             bounding_boxes=bounding_boxes,
             target_size=(height, width),
-            transform=val_test_transform,
+            transform=val_test_transform
         )
         test_dataset = DirectoryIteratorWithBoundingBoxes(
             directory=os.path.join(image_dataset_directory, "test"),
             bounding_boxes=bounding_boxes,
             target_size=(height, width),
-            transform=val_test_transform,
+            transform=val_test_transform
         )
     else:
+        # Load datasets
         train_dataset = ImageFolder(os.path.join(image_dataset_directory, "training"), transform=train_transform)
+        # val_dataset = ImageFolder(os.path.join(image_dataset_directory, "validation"), transform=val_test_transform)
+        # test_dataset = ImageFolder(os.path.join(image_dataset_directory, "test"), transform=val_test_transform)
         val_dataset = FilteredImageFolder(os.path.join(image_dataset_directory, "validation"), transform=val_test_transform)
         test_dataset = FilteredImageFolder(os.path.join(image_dataset_directory, "test"), transform=val_test_transform)
 
+
     train_loader = DataLoader(train_dataset, batch_size=training_minibatch_size, shuffle=True)
+    # Validation and test loaders may be empty
     val_loader = DataLoader(val_dataset, batch_size=training_minibatch_size, shuffle=False) if val_dataset else None
     test_loader = DataLoader(test_dataset, batch_size=training_minibatch_size, shuffle=False) if test_dataset else None
 
-    # Add class weight calculator 
-        # Loss and optimizer
+    print(f"Number of classes: {len(train_dataset.classes)}")
+
+    # Initialize model
+    print("Loading model...")
+    num_classes = len(train_dataset.classes)
+    model = training_configuration.classifier()
+    model = model.to(device)
+
+    # Loss and optimizer
     if class_weights_balancing_method:
         class_weight_calculator = ClassWeightCalculator()
-        class_weights = class_weight_calculator.calculate_class_weights(image_dataset_directory, method=class_weights_balancing_method)
+        class_weights = class_weight_calculator.calculate_class_weights(os.path.join(dataset_directory, "sample_images"), 
+                                                                        method=class_weights_balancing_method)
         class_weights_tensor = torch.tensor(list(class_weights.values()), dtype=torch.float).to(device)
+        class_weights_tensor /= class_weights_tensor.sum()
+
     else:
         class_weights_tensor = None
 
 
-    return training_configuration, bounding_boxes, train_loader, val_loader, test_loader, class_weights_tensor
+    criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
+    optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=1e-4, weight_decay=1e-4)
 
+    # Learning Rate Scheduler
+    if dynamic_learning_rate_reduction:
+        scheduler = ReduceLROnPlateau(optimizer, mode='min',
+                                                         patience=training_configuration.number_of_epochs_before_reducing_learning_rate,
+                                                         factor=training_configuration.learning_rate_reduction_factor,
+                                                         min_lr=training_configuration.minimum_learning_rate)
+    else:
+        scheduler = None
 
-def train_loop(training_configuration, model, train_loader, val_loader, device, optimizer, criterion,
-               localization=False, localization_criterion=None, bounding_boxes=None):
-    """Unified training and validation loop for both standard and localization models."""
-    if localization and bounding_boxes is None:
-        raise ValueError("Bounding boxes are required for localization training.")
+    output_dir = f"./logs/{start_of_training}_{model_name}"
+    writer = SummaryWriter(log_dir=output_dir)
 
+    # Resume from checkpoint
+    initial_epoch = 0
+    if resume_from_checkpoint and os.path.exists(resume_from_checkpoint):
+        checkpoint = torch.load(resume_from_checkpoint, map_location=device)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        initial_epoch = checkpoint["epoch"] + 1
+        print(f"Resumed training from {resume_from_checkpoint}, starting from epoch {initial_epoch}")
+
+    # Training loop
     best_val_accuracy = 0.0
-    writer = SummaryWriter(log_dir=f"./logs/{datetime.date.today()}_{training_configuration.name()}")
-
-    for epoch in range(training_configuration.number_of_epochs):
-        # Training Phase
+    print('Starting model training ... ')
+    for epoch in range(initial_epoch, training_configuration.number_of_epochs):
         model.train()
         running_loss, correct, total = 0.0, 0, 0
-        localization_loss_sum = 0.0
-
         for inputs, labels in train_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
-
-            if localization:
-                classification_output, localization_output = model(inputs)
-                classification_loss = criterion(classification_output, labels)
-                localization_loss = localization_criterion(localization_output, bounding_boxes[labels])
-                loss = classification_loss + 0.5 * localization_loss
-                localization_loss_sum += localization_loss.item()
-            else:
-                classification_output = model(inputs)
-                loss = criterion(classification_output, labels)
-
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
             loss.backward()
+            # Gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             running_loss += loss.item()
-            _, preds = classification_output.max(1)
+            _, preds = outputs.max(1)
             total += labels.size(0)
             correct += preds.eq(labels).sum().item()
 
+        if epoch % 5 == 0:
+            print(f"Epoch {epoch}, Logits range: {outputs.min().item()} to {outputs.max().item()}")
+
+        # print(f"Logits range: {outputs.min().item()} to {outputs.max().item()}")
+        # print(f"Labels: {labels}, Logits shape: {outputs.shape}")
+
         train_accuracy = 100.0 * correct / total
-        print(f"Epoch {epoch + 1}, Train Loss: {running_loss:.4f}, Accuracy: {train_accuracy:.2f}%")
         writer.add_scalar("Loss/Train", running_loss / len(train_loader), epoch)
         writer.add_scalar("Accuracy/Train", train_accuracy, epoch)
+        print(f"Epoch {epoch + 1}, Train Loss: {running_loss:.4f}, Accuracy: {train_accuracy:.2f}%")
 
-        if localization:
-            writer.add_scalar("Loss/Localization", localization_loss_sum / len(train_loader), epoch)
-
-        # Validation Phase
+        # Validation
+        # This is to handle the case where some classes don't have enough data to create train/validation/test splits
         if val_loader:
+            print('Evaluating model ...')
             model.eval()
             val_loss, val_correct, val_total = 0.0, 0, 0
-            val_localization_loss_sum = 0.0
-
             with torch.no_grad():
                 for inputs, labels in val_loader:
                     inputs, labels = inputs.to(device), labels.to(device)
-
-                    if localization:
-                        classification_output, localization_output = model(inputs)
-                        classification_loss = criterion(classification_output, labels)
-                        localization_loss = localization_criterion(localization_output, bounding_boxes[labels])
-                        loss = classification_loss + 0.5 * localization_loss
-                        val_localization_loss_sum += localization_loss.item()
-                    else:
-                        classification_output = model(inputs)
-                        loss = criterion(classification_output, labels)
-
+                    outputs = model(inputs)
+                    loss = criterion(outputs, labels)
                     val_loss += loss.item()
-                    _, preds = classification_output.max(1)
+                    _, preds = outputs.max(1)
                     val_total += labels.size(0)
                     val_correct += preds.eq(labels).sum().item()
 
             val_accuracy = 100.0 * val_correct / val_total
-            print(f"Epoch {epoch + 1}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.2f}%")
             writer.add_scalar("Loss/Validation", val_loss / len(val_loader), epoch)
             writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
+            print(f"Validation Accuracy: {val_accuracy:.2f}%")
+        else:
+            print("No validation samples available. Skipping validation.")
 
-            if localization:
-                writer.add_scalar("Loss/Validation_Localization", val_localization_loss_sum / len(val_loader), epoch)
+        if scheduler:
+            scheduler.step(running_loss)
 
-            # Save best model
-            if val_accuracy > best_val_accuracy:
-                best_val_accuracy = val_accuracy
-                torch.save({
-                    "epoch": epoch,
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "val_accuracy": val_accuracy,
-                }, f"./logs/{datetime.date.today()}_{training_configuration.name()}_best_model.pth")
-                print(f"Best model saved with accuracy: {val_accuracy:.2f}%")
+        # Save best model
+        if save_after_every_epoch or val_accuracy > best_val_accuracy:
+            best_val_accuracy = val_accuracy
+            torch.save({
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "val_accuracy": val_accuracy,
+            }, 
+            os.path.join(output_dir, f"{model_name}_epoch_{epoch + 1}.pth"))
+            print(f"Best model saved with accuracy: {val_accuracy:.2f}%")
 
-    writer.close()
     print("Training completed.")
+    # This is to handle the case where some classes don't have enough data to create train/validation/test splits
+    if test_loader:
+        print('Testing model ...')
+        model.eval()
+        test_correct, test_total = 0, 0
+        predictions, true_labels = [], []
+        with torch.no_grad():
+            for inputs, labels in test_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                _, preds = outputs.max(1)
+                predictions.extend(preds.cpu().numpy())
+                true_labels.extend(labels.cpu().numpy())
+                test_total += labels.size(0)
+                test_correct += preds.eq(labels).sum().item()
 
+        test_accuracy = 100.0 * test_correct / test_total
+        print(f"Test Accuracy: {test_accuracy:.2f}%")
+        print("Classification Report:")
+        print(classification_report(true_labels, predictions, target_names=train_dataset.classes))
+    else:
+        print("No test samples available. Skipping testing.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train a PyTorch model.")
+    parser = argparse.ArgumentParser(description="Train a PyTorch model for symbol classification.")
     parser.add_argument("--dataset_directory", required=True, type=str)
-    parser.add_argument("--model_name", required=True, choices=["resnet", "vgg", "vgg4_with_localization"], type=str)
-    parser.add_argument("--minibatch_size", type=int, default=32)
+    parser.add_argument("--model_name", required=True, choices=["resnet", "vgg"], type=str)
+    parser.add_argument("--minibatch_size", type=int, default=64)
     parser.add_argument("--optimizer", type=str, default="Adam")
-    parser.add_argument("--class_weights_balancing_method", type=str, default=None)
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None)
     args = parser.parse_args()
 
-    training_configuration, bounding_boxes, train_loader, val_loader, test_loader, class_weights_tensor = load_dataset(
-        args.dataset_directory, args.model_name, args.optimizer, 192, 96, args.minibatch_size,
-        args.class_weights_balancing_method
+    train_model(
+        dataset_directory=args.dataset_directory,
+        model_name=args.model_name,
+        width=192,
+        height=96,
+        training_minibatch_size=args.minibatch_size,
+        optimizer_name=args.optimizer,
+        dynamic_learning_rate_reduction=True,
+        class_weights_balancing_method='skBalance',
+        save_after_every_epoch=False,
+        resume_from_checkpoint=args.resume_from_checkpoint,
     )
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = training_configuration.classifier().to(device)
-    optimizer = getattr(optim, args.optimizer)(model.parameters(), lr=0.001)
-    criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
-
-    if hasattr(training_configuration, "performs_localization") and training_configuration.performs_localization():
-        train_loop(training_configuration, model, train_loader, val_loader, device, optimizer, criterion,
-                   localization=True, localization_criterion=nn.SmoothL1Loss(), bounding_boxes=bounding_boxes)
-    else:
-        train_loop(training_configuration, model, train_loader, val_loader, device, optimizer, criterion)

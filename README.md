@@ -43,24 +43,6 @@ Ensure you have Conda installed on your machine. If not, download it from [Conda
 
 There are multiple dataset the can be downlaoaded to train the model on 
 
-- Audiveris Dataset
-
-   This dataset contains 800 of Typeset music sheet images with XML annotations. This data can be used for both Symbol Classification and Object Detection tasks.
-
-   Run the `AudiverisOmrImageExtractor.py` script to extract the dataset into the proper directory: 
-   ```bash
-   python3 ModelTrainer/datasets/AudiverisOmrImageExtractor.py
-   ```
-
-- Fornes Dataset
-
-   This dataset contains 4100 of Handwritten music sheet images. This data can be used for Symbol Classification task.
-
-   Run the `FornesMusicSymbolsImagePreparer.py` script to extract the dataset into the proper directory: 
-   ```bash
-   python3 ModelTrainer/datasets/FornesMusicSymbolsImagePreparer.py
-   ```
-
 - MUSCIMA++ Dataset
 
    This dataset contains > 90000 annotatations of Handwritten music sheet images, Measure Annotations, MuNG. This data can be used for the following tasks: Symbol Classification, Object Detection, End-To-End Recognition, Measure Recognition.
@@ -68,15 +50,6 @@ There are multiple dataset the can be downlaoaded to train the model on
    Run the `MuscimaPlusPlusImageGenerator2.py` script to extract the dataset into the proper directory: 
    ```bash
    python3 ModelTrainer/datasets/MuscimaPlusPlusImageGenerator2.py
-   ```
-
-- OpenOMR Dataset
-
-   This dataset contains 1000 score images of Typeset music sheets. This data can be used for Symbol Classification task.
-
-   Run the `OpenOmrImagePreparer.py` script to extract the dataset into the proper directory: 
-   ```bash
-   python3 ModelTrainer/datasets/OpenOmrImagePreparer.py
    ```
 
 ### 2. Split Dataset
@@ -112,27 +85,5 @@ Train the selected model using the TrainModel.py script.
 
 Example
    ```bash
-    python3 ModelTrainer/TrainModel.py --dataset_directory datasets/data/data --model_name resnet
-   ```
-
-## Localization Preparation
-
-### 1. Split MUSCIMA++ Dataset
-Run the `DatasetSplitter.py` script to split the MUSCIMA data into train, validation, and test sets.
-```bash
-python ModelTrainer/datasets/DatasetSplitter.py --source_directory data/data/muscima_pp_raw/v2.0/data --destination_directory data/data/muscima_pp_raw/v2.0/data/images
-```
-   This will organize the dataset into:
-
-   ```bash
-    data/images/
-            training/
-            validation/
-            test/
-   ```
-
-## 2. Get Bounding Boxes for MUSCIMA++ Dataset
-   Run the `GetBoundingBoxes.py` script to obtain the bounding boxes for this dataset in the pickle file `boundingboxes.pkl` under the image directory. This data can be used for the localization models.
-   ```bash
-   python3 ModelTrainer/datasets/GetBoundingBoxes.py
+    python3 ModelTrainer/TrainModel.py --dataset_directory data/data --model_name resnet
    ```

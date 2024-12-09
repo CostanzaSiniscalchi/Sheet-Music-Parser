@@ -24,7 +24,7 @@ class ClassWeightCalculator:
         :return:
         """
 
-        if method == None:
+        if method is None:
             return None
 
         if method not in ['simple', 'skBalance']:
@@ -48,14 +48,16 @@ class ClassWeightCalculator:
             number_of_elements_per_class[class_name] = number_of_elements
             class_weights[class_name] = 1 / math.sqrt(number_of_elements)
 
-        if method == "simple":
+        if method is "simple":
             pass
         else:
             # y simulates the actual data by repeating an instance of the class-name per actual instance,
             # e.g. ['1-8-Time' '1-8-Time' '12-8-Time' ..., 'Whole-Note' 'Whole-Note' 'Whole-Note']
             y = numpy.repeat(classes, list(number_of_elements_per_class.values()))
 
-            balanced_class_weights = class_weight.compute_class_weight('balanced', classes, y)
+            balanced_class_weights = class_weight.compute_class_weight(class_weight = 'balanced', 
+                                                                        classes = classes, 
+                                                                        y = y)
             class_weights = dict(zip(classes, balanced_class_weights))
 
         # class_weights_with_indices = dict()
@@ -70,7 +72,7 @@ class ClassWeightCalculator:
 
 if __name__ == "__main__":
     class_weight_calculator = ClassWeightCalculator()
-    class_weights_simple = class_weight_calculator.calculate_class_weights("data/data/images", "simple")
-    class_weights_balanced = class_weight_calculator.calculate_class_weights("data/data/images", "balanced")
+    class_weights_simple = class_weight_calculator.calculate_class_weights("data/images", "simple")
+    class_weights_balanced = class_weight_calculator.calculate_class_weights("data/images", "balanced")
     print(class_weights_simple)
     print(class_weights_balanced)

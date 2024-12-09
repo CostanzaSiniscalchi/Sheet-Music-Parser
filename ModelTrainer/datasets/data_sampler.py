@@ -5,7 +5,7 @@ from pathlib import Path
 
 # Source and destination paths
 source_dir = "data/data/muscima_images"
-destination_dir = "data/data/images"
+destination_dir = "data/data/sample_images"
 
 # Total number of images in the sample
 total_sample_size = 10000

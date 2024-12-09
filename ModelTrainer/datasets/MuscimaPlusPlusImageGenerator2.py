@@ -169,7 +169,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--raw_dataset_directory",
         type=str,
-        default="data/data/muscima_pp_raw",
+        default="data/data/muscima_pp_raw/v2.0",
         help="The directory, where the raw Muscima++ dataset can be found")
     parser.add_argument(
         "--image_dataset_directory",
