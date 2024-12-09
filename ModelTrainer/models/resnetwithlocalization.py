@@ -97,13 +97,20 @@ class ResNetlWithLocalization(nn.Module):
         x = F.relu(x)
         x = self.block5c[0](x) + self.block5c[1](x)
         x = F.relu(x)
-        
+
         x = self.pool5(x)
 
         x = self.flatten(x)
         classification_output = self.classification_head(x)
         bounding_box_output = self.regression_head(x)
         return classification_output, bounding_box_output
+
+    def name(self) -> str:
+        """Returns the name of this configuration."""
+        return "resnet_with_localization"
+
+    def performs_localization(self) -> bool:
+        return True
 
 
 if __name__ == "__main__":
