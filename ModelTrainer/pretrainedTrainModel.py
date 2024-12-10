@@ -202,4 +202,3 @@ if __name__ == "__main__":
                    localization=True, localization_criterion=nn.SmoothL1Loss(), bounding_boxes=bounding_boxes)
     else:
         train_loop(training_configuration, model, train_loader, val_loader, device, optimizer, criterion)
-

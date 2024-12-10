@@ -7,7 +7,6 @@ def parse_bounding_boxes_from_xml(xml_directory):
 
     bounding_boxes = {}
 
-    # Iterate through XML files in the directory
     for xml_file in os.listdir(xml_directory):
         print("outside")
         if xml_file.endswith(".xml"):
@@ -65,7 +64,7 @@ def prepare_bounding_boxes_for_training(xml_directory, output_directory):
     print(f"Bounding boxes saved to: {output_path}")
     
     print(f"Total images with bounding boxes: {len(bounding_boxes)}")
-    for img, boxes in list(bounding_boxes.items())[:5]:  # Print first 5 as example
+    for img, boxes in list(bounding_boxes.items())[:5]: 
         print(f"{img}: {len(boxes)} bounding boxes")
 
 if __name__ == "__main__":
