@@ -139,5 +139,7 @@ python ModelTrainer/datasets/DatasetSplitter.py --source_directory data/data/mus
 
 ## Localization model Experiment Files
 End-to-End VGG Classification and Localization Model: `ModelTrainer/muscima_end_to_end.py`
+
 Pretrained VGG model with Localization Extension: `ModelTrainer/muscima_vgg_pretrained.py`
+
 Pretrained Fast R-CNN Model with Localization Extension: `ModelTrainer/muscima_RCNN.py`
